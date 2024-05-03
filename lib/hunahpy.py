@@ -5,9 +5,24 @@ Created on Tue Mar 20 15:08:31 2018
 @author: Luis Villegas
 """
 
+### TDC  ###
+""" This two parameters are ALWAYS necessary for a TDC object """
+timestamp_count = 1000000 # buffer size (i.e. number of events saved in memory at any given time)
+channels_enabled = 0xff # all channels
+
+
+### GUI ###
+""" These parameters only affect the graphical user interface (GUI) """
+# Histogram
+binwidth = 10000 # in timebase units, 1 timebase units roughly equals 81 ps
+bincount = 5000 # number of bins in the histogram
+# Coincidence counters
+exposure_time = 100 # in milliseconds
+coincidence_window = 100 # in bins
+
 from ctypes import WinDLL,byref,c_int,c_int8,c_int32,c_int64,c_double
 from os import path
-import config
+# import config
 import warnings
 
 class TDC:
@@ -23,7 +38,7 @@ class TDC:
         self.getTimebase = self.dll_lib.TDC_getTimebase
         self.getTimebase.restype = c_double
         self.timebase = self.getTimebase()
-        self.timestamp_count = config.timestamp_count
+        self.timestamp_count = timestamp_count
         
         # Variable declarations
         c_array8 = c_int8*self.timestamp_count
@@ -31,8 +46,8 @@ class TDC:
         self.getVersion = self.dll_lib.TDC_getVersion
         self.getVersion.restype = c_double
         self.channelMask = c_int8()
-        self.coincWin = c_int(config.coincidence_window)
-        self.expTime = c_int(config.exposure_time)
+        self.coincWin = c_int(coincidence_window)
+        self.expTime = c_int(exposure_time)
         self.timestamps = c_array64()
         self.channels = c_array8()
         self.valid = c_int32()
@@ -55,7 +70,7 @@ class TDC:
         # 5 = 1,3         13 = 1,3,4
         # 6 = 2,3         14 = 2,3,4
         # 7 = 1,2,3       15 = 1,2,3,4
-        self.channels_enabled = config.channels_enabled # All
+        self.channels_enabled = channels_enabled # All
         print(">>> Enabling channelmask {} : ".format(c_int8(self.channels_enabled).value),end="")
         rs = self.dll_lib.TDC_enableChannels(self.channels_enabled)
         self.switch(rs)
@@ -124,8 +139,8 @@ class TDC:
         print("Coincidence Window: {} bins".format(self.coincWin.value))
         print("Exposure Time: {} ms".format(self.expTime.value))
     
-    def configureSelfTest(self,test_channel,sg_period,sg_burst,burst_dist):
-        rs = self.dll_lib.TDC_configureSelftest(test_channel,
+    def ureSelfTest(self,test_channel,sg_period,sg_burst,burst_dist):
+        rs = self.dll_lib.TDC_ureSelftest(test_channel,
                                                 sg_period,
                                                 sg_burst,
                                                 burst_dist)
@@ -167,13 +182,22 @@ class TDC:
             # Start writing to file
             print(">>> Opening data file \""+filename+"\"")
             self.dll_lib.TDC_writeTimestamps(str.encode(filename),binary)
-        
+    
+    def getHbtEventCount(self):
+        """
+        """
+        totalCount  = c_int64()
+        lastCount   = c_int64()
+        lastRate    = c_double()
+        error = self.dll_lib.TDC_getHbtEventCount(byref(totalCount), byref(lastCount), byref(lastRate))
+        return error, totalCount.value, lastCount.value, lastRate.value
+
     def setHistogramParams(self,bincount=0,binwidth=0):
         self.dll_lib.TDC_clearAllHistograms()
         
         if binwidth == 0 or bincount == 0:
-            self.bincount = config.bincount
-            self.binwidth = config.binwidth
+            self.bincount = bincount
+            self.binwidth = binwidth
         else:
             self.bincount = bincount
             self.binwidth = binwidth
